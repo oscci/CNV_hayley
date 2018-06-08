@@ -561,9 +561,9 @@ p3 <- ggplot(CNV_dat,aes(x=sum_pLi_C)) +
 
 #mylegend<-g_legend(p1)  #This throws error, even after installing lemon
 
-grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
-             arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
-             heights=c(1,3))
+#grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
+ #            arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
+  #           heights=c(1,3))
 
 
 CNV_dat$Group<-as.factor(CNV_dat$Group)
@@ -681,7 +681,7 @@ cutlist<-c(0,15,40,60,70,80,84,90,95,100)/100 #cumulated percentage cutoffs for 
 CNV_dat$pvalue<-pnorm(CNV_dat$pheno)
 CNV_dat$phenord<- cut(CNV_dat$pvalue, breaks = c(cutlist), labels = c(1:9)) 
 CNV_dat$phenord <- as.numeric(CNV_dat$phenord)
-table(CNV_dat$phenord,CNV_dat$Group)
+#table(CNV_dat$phenord,CNV_dat$Group)
 #histogram(CNV_dat$pheno)
 ```
 ##Poisson regression
@@ -717,11 +717,12 @@ Analyses so far have used an existing dataset (SLIC dataset) to work out optimal
 
 In the new dataset, our sample size is fixed (130 SCT cases and 184 comparison cases), as the data are already collected. We conduct a power analysis using some new simulated data to give an idea of the effect size that is detectable with this sample.
 
-Our main goal is to see whether the association between the CNV burden and phenotype is stronger for the SCT vs comparison group. For Poisson regression we need to specify coefficients corresponding to main effects of CNV burden and group status, as well as the interaction between these. We know in advance that the effect of CNV burden tends to be small and not always detectable, whereas the effect of group status is large - with SCT cases being notably more impaired on average than comparison cases. If we fix the beta for the CNV effect at .10, and the beta for the group effect at .18, we get plausible-looking data. (Note that because we use Poisson regression, it is the exponentials of these values that we enter into the regression). 
+Our main goal is to see whether the association between the CNV burden and phenotype is stronger for the SCT vs comparison group. For Poisson regression we need to specify coefficients corresponding to main effects of CNV burden and group status, as well as the interaction between these. We know in advance that the effect of CNV burden tends to be small and not always detectable, whereas the effect of group status is large - with SCT cases being notably more impaired on average than comparison cases. If we fix the beta for the CNV effect at .10, and the beta for the group effect at .18, we get plausible-looking data. (Though this does vary from run to run with our smallish sample size. Note also that because we use Poisson regression, it is the exponentials of the beta values that enter into the regression). 
 
 ```{r pois_pwr, echo=TRUE}
 #generate a population of data to sample and refit model.
 #The first run is just illustrative to show what the simulated data looks like relative to the double hit model.
+
 n <- 100000 #size of population from which we will sample
  myn<-314 #size of sample (based on true size in our SCT/comparison sample)
  
@@ -743,6 +744,8 @@ n <- 100000 #size of population from which we will sample
  
 #generate Y-values
  phenotype <- rpois(n=n, lambda=mu)
+ w<-which(phenotype>10) #truncate high values
+ phenotype[w]<-10
  
 #data set
  simdata <- data.frame(phenotype=phenotype, sum_pLi=sum_pLi,Group=Group)
@@ -753,6 +756,7 @@ n <- 100000 #size of population from which we will sample
  
 ```{r data plot1} 
 #plot to see if this is what is expected for myn. 
+set.seed(6)
  data2<-simdata[sample(1:100000,myn,replace=T),]
 #Plot the frequency distribution for pLi fo the two groups
  ggplot(data2,aes(x=sum_pLi,colour=Group,fill=Group))+geom_density(alpha=0.4)+theme_bw()
@@ -763,10 +767,10 @@ n <- 100000 #size of population from which we will sample
  w<-which(data2$Group=='Comparison')
  compdata<-data2[w,]
  sctdata<-data2[-w,]
- r0 <- round(cor(compdata$sum_pLi,compdata$phenotype, method='spearman'),3)
- r1 <- round(cor(sctdata$sum_pLi,sctdata$phenotype, method='spearman'),3)
+ rc <- round(cor(compdata$sum_pLi,compdata$phenotype, method='spearman'),3)
+ rs <- round(cor(sctdata$sum_pLi,sctdata$phenotype, method='spearman'),3)
  ggplot(data2,aes(x=sum_pLi,y=phenotype,color=Group))+geom_point()+theme_bw()
-print(paste0('Correlation of pLI/phenotype: comparison = ',r0,'; SCT = ',r1))
+print(paste0('Correlation of pLI/phenotype: comparison = ',rc,'; SCT = ',rs))
 ```
  
 ##Power analysis
@@ -795,7 +799,8 @@ for (b in 5:20){
  levels(simdata$Group)<-c("Comparison","SCT")
     compr <- vector()
    sctr <- vector()
- for(i in 1:100)
+   nsim <-500
+ for(i in 1:nsim)
  {
 
  s.data<-simdata[sample(1:100000,myn,replace=F),]
@@ -818,20 +823,20 @@ for (b in 5:20){
  reject[i,4] = ifelse( coef(summary(mod1))[4,4] < .05, 1, 0)
  }
  
- pows<-c(binom.test(sum(reject[,1]), 100)$estimate,binom.test(sum(reject[,3]), 100)$estimate,binom.test(sum(reject[,2]), 100)$estimate,binom.test(sum(reject[,4]), 100)$estimate)
+ pows<-c(binom.test(sum(reject[,1]), nsim)$estimate,binom.test(sum(reject[,3]), nsim)$estimate,binom.test(sum(reject[,2]), nsim)$estimate,binom.test(sum(reject[,4]), nsim)$estimate)
  
 data.pow[thisrow,1]<-beta3
  data.pow[thisrow,2:5]<-as.data.frame(t(pows))
- data.pow[thisrow,6:8]<-quantile(compr,c(.05,.5,.95))
-  data.pow[thisrow,9:11]<-quantile(sctr,c(.05,.5,.95))
+ data.pow[thisrow,6:8]<-round(quantile(compr,c(.05,.5,.95)),2)
+  data.pow[thisrow,9:11]<-round(quantile(sctr,c(.05,.5,.95)),2)
 }
 
   colnames(data.pow)<-c("beta3","Pow.Intercept","Pow.CNV","Pow.Group","Pow.CNV:Group","r.05.Comp","r.avg.Comp","r.95,Comp","r.05.SCT","r.avg.SCT","r.95.SCT")
 
-
+kable(data.pow[1:16,c(1,5,7,10)])
 ```
 
-The table shows the power to detect the interaction term (and other effects) with beta1 and beta2 fixed to .10 and .18. The right-most columns show the Spearman correlation (average value and lower and upper 95% CI) for the Comparison group and the SCT group. The correlation for the Comparison group does not change: with these parameters, it is fixed around .11. As beta3 increases, we see the correlation increase for the SCT group: power is above 80% to detect a differential effect of CNV on SCTs (double hit model) if the correlation for the SCT group is around .35 or above.
+The table shows the power to detect the interaction term with beta1 and beta2 fixed to .10 and .18. The right-most columns show the average Spearman correlations for the Comparison group and the SCT group. The correlation for the Comparison group does not change: with these parameters, it is fixed around .11. As beta3 increases, we see the correlation increases for the SCT group: power is above 80% to detect a differential effect of CNV on SCTs (double hit model) if the correlation for the SCT group is around .35 or above.
 
 ##Session information
 
