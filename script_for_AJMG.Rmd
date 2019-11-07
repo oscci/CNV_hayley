@@ -1,0 +1,162 @@
+---
+title: "script_for_AJMG"
+author: "DVM Bishop"
+date: "07/11/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(tidyverse)
+require(stringr)
+require(plyr)
+require(yarrr)
+```
+
+## Read and merge files
+
+Github repository is CNV_Hayley
+
+R project is CNV_Hayley.Rproj on deevybee_repo
+
+Protocol is CNV_for_protocol.rmd from Jun 16 2018
+
+Manuscript draft is with oscci manuscripts in folder hayley cnv, as Trisomy_CNV_AJMG_v1_DB 
+
+Data on CNVs now in same folder as R project; original xls file from Dianne, with parental concern variable, is saved as 2 worksheets in csv – one for autosomes and one for X chromosome
+all_samples_results_parco.csv
+all_samples_results_Xchrom.csv
+
+These need to have name codes changed to match our codes by stripping off DB and making other minor modifications.
+
+Remember to set working directory to source file location
+
+NB famsplangconc coded as 1 if any concern about speech/language in either twin. (May be co-twin to the proband) - some of these were coded N/A in Di's file - have updated these manually.
+
+
+```{r readfiles}
+cnvdat<-read.csv('all_samples_results_parco_corrected.csv',stringsAsFactors=FALSE)
+cnvdatx<-read.csv('all_samples_results_Xchrom.csv',stringsAsFactors=FALSE)
+
+identical(cnvdat$id,cnvdatx$id) #OK - original files were not identical- found mismatch
+
+genderdat<-read.csv('TwinsData_gender.csv')
+phenodat<-read.csv('unblinded_pheno_sct_twin.csv',stringsAsFactors=FALSE)
+#This file was created using 'geno_pheno_analysis_190215.Rmd' - i.e. main script for Newbury et al paper. In that script, IDs are blinded, but here we need to match up with CNV data, so retain the codes.
+
+#need to strip out correct ID from the cnv files
+#first of all remove _rpt from end of name
+#also remove DB from start
+#using cnvdatx as this seems more accurate, but ultimately should agree with cnvdat
+
+
+
+for (i in 1:nrow(cnvdatx)){
+  cnvdatx$id[i] <-  str_replace(cnvdatx$id[i],"_rpt", "")
+  cnvdatx$id[i] <-  str_replace(cnvdatx$id[i],"DB", "")
+    cnvdat$id[i] <-  str_replace(cnvdat$id[i],"_rpt", "")
+  cnvdat$id[i] <-  str_replace(cnvdat$id[i],"DB", "")
+}
+
+#for SCTs, just retain first 3 digits
+myrows<-which(cnvdatx$Group != 'twin')
+
+cnvdatx$id[myrows]<-str_sub(cnvdatx$id[myrows],1,3)
+cnvdat$id[myrows]<-str_sub(cnvdatx$id[myrows],1,3)
+#NB these ids are characters, so need to alter phenodat,where id is numeric
+#Need to add leading zeroes, so, e.g. 1 becomes 001
+
+phenodat$id<-as.character(phenodat$record_id)
+w<-which(as.numeric(phenodat$record_id)<10)
+phenodat$id[w]<-paste0('0',phenodat$id[w])
+w<-which(as.numeric(phenodat$record_id)<100)
+phenodat$id[w]<-paste0('0',phenodat$id[w])
+
+#order all files by id
+genderdat <- genderdat[order(genderdat$record_id),] 
+phenodat <- phenodat[order(phenodat$id),] 
+cnvdat <- cnvdat[order(cnvdat$id),] 
+cnvdatx <- cnvdatx[order(cnvdatx$id),] 
+#align files and bolt together
+
+#Just check we do have same cases in same rows
+for(i in 1:nrow(cnvdat)){
+  if(cnvdat$id[i] != cnvdatx$id[i]){
+    print(cnvdat$id[i])
+  }
+  }
+
+
+
+w<-which(phenodat$id %in% cnvdatx$id)
+
+cnvpheno<-cbind(phenodat[w,2:44],cnvdat,cnvdatx)
+
+cnvpheno$female<-0
+w4<-which(cnvpheno$trisomy==1)
+cnvpheno$female[w4]<-1
+
+w3<-which(cnvpheno$Group=='twin')
+w2<-which(genderdat$record_id %in% cnvpheno$id) #twins only!
+
+cnvpheno$female[w3]<-genderdat$female[w2] #twins who are in cnvpheno assigned gender from genderdat
+
+cnvpheno$groupfem<-paste0(cnvpheno$Group,cnvpheno$female)
+
+#Do some renaming of cols
+for (i in 56:64){
+  colnames(cnvpheno)[i]<-paste0(colnames(cnvpheno)[i],'X')
+}
+colnames(cnvpheno)[63]<-'is_trisomy'
+#Make an overall code for trisomy vs twin
+cnvpheno$is_trisomy <-1
+w<-which(cnvpheno$Group=='twin')
+cnvpheno$is_trisomy[w]<-0 
+```
+
+We now have a file with the phenotype and genotype data together.  
+First thing that is needed is Table 1, showing Ns in relation to ascertainment bias.
+```{r table1}
+
+cnvpheno$bias<-cnvpheno$famsplangconc #default from twin code for family bias
+
+w<-which(cnvpheno$Group !='twin')
+cnvpheno$bias[w]<-0 #default no bias for trisomies
+w<-c(which(cnvpheno$why_tested==2),which(cnvpheno$why_tested==3))
+cnvpheno$bias[w]<-1
+
+mytab<- table(cnvpheno$groupfem,cnvpheno$bias)
+
+
+```
+The derivation of the global neurodevelopmental index is now provided in the paper in Table 2.
+I have subtracted scores from 10, so that a high score represents good functioning. 
+
+```{r globalneuro}
+
+cnvpheno$gni_inv<-(10-cnvpheno$global_neurodev)
+
+```
+
+Just recreating Hayley's analysis of burden.
+
+```{r burdentable}
+w<-which(cnvpheno$bias==1)
+biasset<-cnvpheno[w,]
+nobiasset<-cnvpheno[-w,]
+
+mytablea<-table(nobiasset$is_trisomy,nobiasset$total_cnvs)
+print('Low bias groups: autosomes')
+round(prop.table(mytablea,1)*100,1)
+print('Low bias groups: Xchr')
+mytablex<-table(nobiasset$is_trisomy,nobiasset$total_cnvsX)
+round(prop.table(mytablex,1)*100,1)
+
+
+#do pirate-plots
+pirateplot(log(1+cnvpheno$total_cnvs)~cnvpheno$bias*cnvpheno$is_trisomy,data=cnvpheno)
+pirateplot(log(1+cnvpheno$total_Kbp)~cnvpheno$bias*cnvpheno$is_trisomy,data=cnvpheno)
+
+#As explained in the paper, the X chromosome is a bit of a nightmare if you have 3 Xs!
+pirateplot(log(1+log(1+cnvpheno$total_KbpX))~cnvpheno$bias*cnvpheno$is_trisomy*cnvpheno$female,data=cnvpheno)
+```
