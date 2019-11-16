@@ -25,6 +25,8 @@ require(MASS)
 require(simglm)
 require(conflicted) #flags up conflicted functions
 require(sandwich)
+library(coin)
+library(psych)
 ```
 
 ## Read and merge files
@@ -236,20 +238,19 @@ cnvpheno$is.trisomy<-as.factor(cnvpheno$is.trisomy)
 ```
 
 
-```{r visualise.dists, echo=FALSE}
+
+```{r visualise.dists, echo=FALSE,fig.height=8,fig.width=8}
 #-----------------------------------------------------------------------------#
 
+png("scatterplot_CNV.png")
 # Scatter plot with marginal histograms 
-# NB this needs some modification
 # I have used the raw rather than censored values for the plot (but they only go up to 8?)
 # Have taken log for kBp to aid visualisation
-# Added legend to bottom, but now the scales for the density plots are messed up...
 # Used colour to depict twin/SCT and shape to depict bias and whether patho CNV
 
-# Would like to include jitter on x-axis, but my attempt to do this just duplicated points!
-
 # Create factor variables for group and bias
-cnvpheno$groupfac<-factor(cnvpheno$is.trisomy)
+cnvpheno$trisomy<-factor(cnvpheno$is.trisomy)
+levels(cnvpheno$trisomy) <- c('Twin','Trisomy')
 
 cnvpheno$bias_path<-as.factor(10*cnvpheno$bias+cnvpheno$pathoCNV)
 shapelist<-c(1,19,0,15) #shapes are unfilled circle, filled circle, unfilled sq, filled sq
@@ -258,17 +259,17 @@ shapelist<-c(1,19,0,15) #shapes are unfilled circle, filled circle, unfilled sq,
 # No bias, pathoCNV = filled circle
 # Bias, no pathoCNV = unfilled square
 # Bias, pathoCNV = filled square
+levels(cnvpheno$bias_path) <- c('No bias, no pathoCNV','No bias, pathoCNV','Bias, no pathoCNV','Bias, pathoCNV')
 
-
-p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=log(total_Kbp),colour=is.trisomy,shape=bias_path))+
+p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=log(total_Kbp),colour=trisomy,shape=bias_path))+
   scale_shape_manual(values=shapelist)+
    scale_color_manual(values=c('gray21','red'))+
   geom_point()+
   scale_x_continuous(expand=c(0.02,0)) +
   scale_y_continuous(expand=c(0.02,0)) +
 
-  theme_bw() +
-  theme(legend.position="bottom",plot.margin=unit(c(1,1,1,1),"points"))
+  theme_bw() + guides(col = guide_legend(ncol = 1)) +
+  theme(legend.position=c(1.2,1.2),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank())
 
 theme0 <- function(...) theme( legend.position = "none",
                                panel.background = element_blank(),
@@ -284,16 +285,16 @@ theme0 <- function(...) theme( legend.position = "none",
                                axis.ticks.margin = unit(0,"null"),
                                panel.border=element_rect(color=NA),...)
 
-p2 <- ggplot(cnvpheno,aes(x=sum_pLi,colour=factor(is.trisomy),fill=factor(is.trisomy))) + 
+p2 <- ggplot(cnvpheno,aes(x=sum_pLi,colour=factor(trisomy),fill=factor(trisomy))) + 
   geom_density(alpha=0.5) + 
   scale_color_manual(values=c('gray21','red'))+
   scale_fill_manual(values=c('gray21','red'))+
-  scale_x_continuous(breaks=NULL,expand=c(0.02,0)) +
+  scale_x_continuous(breaks=NULL,expand=c(0.00,0)) +
   scale_y_continuous(breaks=NULL,expand=c(0.00,0)) +
   theme_bw() +
-  theme0(plot.margin = unit(c(0,0,0.5,3),"lines")) 
+  theme0(plot.margin = unit(c(0,0,0.5,2),"lines")) 
 
-p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(is.trisomy),fill=factor(is.trisomy))) + 
+p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(trisomy))) + 
   geom_density(alpha=0.5) + 
   scale_color_manual(values=c('gray21','red'))+
    scale_fill_manual(values=c('gray21','red'))+
@@ -305,10 +306,12 @@ p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(is.trisomy),fill=factor
 
 
 
-grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
+ grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
              arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
              heights=c(1,3))
 
+
+dev.off()
 
 ##############################################################################
 ```
@@ -332,6 +335,7 @@ Next we consider how well the different measures differentiate between the group
 dowilcox <- function(mydf){
 BF_correct_alpha<-0.05/3
 #print('Total CNVs')
+
 w1<-wilcox.test(total_cnvs~is.trisomy,data=mydf,alternative=c("less"),conf.int=TRUE)
 #print(list(p.value=w1$p.value,corrected.alpha=BF_correct_alpha,res=w1$p.value<=BF_correct_alpha))
 #print('Total Kbp')
@@ -346,7 +350,7 @@ w3<-wilcox.test(sum_pLi_C~is.trisomy,data=mydf,alternative=c("less"),conf.int=TR
 # Given correlations between the CNV measures, the Benjamini-Yekutieli (BY) correction is applied. We see that the pattern of significance among the tests remains unchanged.
 
 ##
-pvals<-round(c(w1$p.value,w2$p.value,w3$p.value),2)
+pvals<-round(c(w1$p.value,w2$p.value,w3$p.value),3)
 BY = p.adjust(pvals, "BY")
 res = cbind(pvals, BY=round(BY, 3))
 colnames(res)<-c("Uncorrected","Benjamini-Y")
@@ -355,18 +359,52 @@ return(res)}
 
 ```
 
+Hayley had done analysis using permutation analysis in PLINK. We can achieve the same results in R. N.B. This was not the pre-registered analysis, though it could be argued that it is a reasonable one to do.
+
+Here is a function to do that (thanks to Paul Thompson for this)
+
+```{r permtest}
+#Multiple testing: permutation test, one-tailed
+doperm <- function(mydf){
+BF_correct_alpha<-0.05/3
+
+p1<-coin::pvalue(oneway_test(total_cnvs~is.trisomy,data=mydf, alternative="less", 
+                   distribution=approximate(nresample=9999)))
+p2<-coin::pvalue(oneway_test(total_Kbp~is.trisomy,data=mydf, alternative="less", 
+                   distribution=approximate(nresample=9999)))
+p3<-coin::pvalue(oneway_test(sum_pLi~is.trisomy,data=mydf, alternative="less", 
+                   distribution=approximate(nresample=9999)))
+
+pvals<-round(c(p1[1],p2[1],p3[1]),3)
+BY = p.adjust(pvals, "BY")
+res = cbind(pvals, BY=round(BY, 3))
+colnames(res)<-c("Uncorrected","Benjamini-Y")
+rownames(res)<-c('Total CNVs','Total Kbp',"sum pLi")
+return(res)}
+
+```
+
+
+
+
 ```{r makeresultstabs}
 
 # Divide data into 2 sets; with and without bias
 w<-which(cnvpheno$bias==1)
-biasset<-cnvpheno[w,]
-nobiasset<-cnvpheno[-w,]
+bias.set<-cnvpheno[w,]
+nobias.set<-cnvpheno[-w,]
 
 res <-dowilcox(cnvpheno)
-knitr::kable(res, caption='All cases')
+knitr::kable(res, caption='Wilcoxon: All cases')
 
-res1 <-dowilcox(nobiasset)
-knitr::kable(res1, caption='Low bias cases')
+res1 <-dowilcox(nobias.set)
+knitr::kable(res1, caption='Wilcoxon: Low bias cases')
+
+res2<-doperm(cnvpheno)
+knitr::kable(res2, caption='Permutation: All cases')
+
+res3<-doperm(nobias.set)
+knitr::kable(res3, caption='Permutation: Low bias cases')
 
 by_group<-cnvpheno %>% group_by(is.trisomy)
 groupmeans<-dplyr::summarise(by_group,
@@ -379,9 +417,44 @@ groupmeans<-dplyr::summarise(by_group,
 )
 groupmeans
 
+by_group2<-nobias.set %>% group_by(is.trisomy)
+groupmeans2<-dplyr::summarise(by_group2,
+  mean_cnvs = round(mean(total_cnvs),2),
+   sd_cnvs = round(sd(total_cnvs),2),
+    mean_Kbp = round(mean(total_Kbp),1),
+   sd_Kbp = round(sd(total_Kbp),1),
+  mean_pLi = round(mean(sum_pLi),3),
+  sd_pLi = round(sd(sum_pLi),3)
+)
+groupmeans2
+
 ```
 
+```{r makemaintable}
+maintab <- data.frame(matrix(NA,nrow=7,ncol=9))
+colnames(maintab)<- c('Measure','Mean.SCT','SD.SCT','Mean.Comp','SD.Comp','Wilcoxon.p','Perm.exact.p','BY-corrected.p','BY.2')
 
+
+maintabx <-data.frame(matrix(NA,nrow=10,ncol=7))
+colnames(maintabx)<-c('.','N CNV','CNV span (Kb)','Total pLI score','N CNV.x','CNV span (Kb).x','Total pLI score.x')
+maintabx[,1]<-c('N SCT','Mean SCT','SD SCT','N Comparison','Mean Comparison','SD Comparison','Wilcoxon p','Permutation p','BY-corrected p','BY2')
+
+#can take Ns from original Table 1 (mytab)
+Nsct<-sum(mytab[3:5,1:2])
+Ntwin<-sum(mytab[1:2,1:2])
+Nsct.x<-sum(mytab[3:5,1])
+Ntwin.x<-sum(mytab[1:2,1])
+maintabx[1,2:7]<-c(Nsct,Nsct,Nsct,Nsct.x,Nsct.x,Nsct.x)
+maintabx[4,2:7]<-c(Ntwin,Ntwin,Ntwin,Ntwin.x,Ntwin.x,Ntwin.x)
+maintabx[2,2:7]<-c(groupmeans[2,2],groupmeans[2,4],groupmeans[2,6],
+                   groupmeans2[2,2],groupmeans2[2,4],groupmeans2[2,6])
+maintabx[3,2:7]<-c(groupmeans[2,3],groupmeans[2,5],groupmeans[2,7],
+                   groupmeans2[2,3],groupmeans2[2,5],groupmeans2[2,7])
+maintabx[5,2:7]<-c(groupmeans[1,2],groupmeans[1,4],groupmeans[1,6],
+                   groupmeans2[1,2],groupmeans2[1,4],groupmeans2[1,6])
+maintabx[6,2:7]<-c(groupmeans[1,3],groupmeans[1,5],groupmeans[1,7],
+                   groupmeans2[1,3],groupmeans2[1,5],groupmeans2[1,7])
+```
 
 
 ## Phenotype analysis
@@ -418,6 +491,7 @@ anova(m2, m1, test="Chisq")
 ```
 Added bits by DB, Nov 2019.
 Just recreating Hayley's analysis of burden.
+(Ignore this for now)
 
 ```{r burdentable}
 
@@ -464,10 +538,10 @@ thiscol<-which(colnames(cnvpheno)==myvar1)
 
   mydf[myrow,2]<-sum(dplyr::filter(cnvpheno[,thiscol],myvar1==1))
   mydf[myrow,3]<-sum(dplyr::filter(cnvpheno,myvar1==0))
-    mydf[myrow,4]<-nrow(dplyr::filter(nobiasset,myvar1==1))
-  mydf[myrow,5]<-nrow(dplyr::filter(nobiasset,myvar1==0))
-    mydf[myrow,6]<-nrow(dplyr::filter(biasset,myvar1==1))
-  mydf[myrow,7]<-nrow(dplyr::filter(biasset,myvar1==0))
+    mydf[myrow,4]<-nrow(dplyr::filter(nobias.set,myvar1==1))
+  mydf[myrow,5]<-nrow(dplyr::filter(nobias.set,myvar1==0))
+    mydf[myrow,6]<-nrow(dplyr::filter(bias.set,myvar1==1))
+  mydf[myrow,7]<-nrow(dplyr::filter(bias.set,myvar1==0))
  
 }
 
@@ -487,7 +561,11 @@ pirateplot(log(1+cnvpheno$total_Kbp)~cnvpheno$bias*cnvpheno$is.trisomy,data=cnvp
 pirateplot(log(1+log(1+cnvpheno$total_KbpX))~cnvpheno$bias*cnvpheno$is.trisomy*cnvpheno$female,data=cnvpheno)
 ```
 
-```{r ind.cnvs}
-mycnvs<-read.csv()
+```{r checkpathocases}
 
-```
+
+```w<-which(cnvpheno$pathoCNV==1)
+temp<-cnvpheno[w,]
+View(temp)
+temp2<-temp[,c(1,42:60)]
+temp2
