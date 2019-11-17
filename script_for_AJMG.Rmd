@@ -334,14 +334,84 @@ shapelist<-c(19,1) #shapes
 # no Bias = filled circle
 
 levels(cnvpheno$bias_fac) <- c('Low bias' ,'High Bias')
-
-p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=log(total_Kbp),colour=trisomy,shape=bias_fac))+
+cnvpheno$jitter_cnv<-jitter(cnvpheno$total_cnvs)+.2
+p1 <- ggplot(cnvpheno,aes(y=log(total_Kbp),x=jitter_cnv,colour=trisomy,shape=bias_fac))+
   scale_shape_manual(values=shapelist)+
    scale_color_manual(values=c('gray21','red'))+
   geom_point()+
   scale_x_continuous(expand=c(0.02,0)) +
   scale_y_continuous(expand=c(0.02,0)) +
- labs(x = "Total pLI (all CNVs)",y="Total CNV span (log Kb)")+
+ labs(x = "N CNVs",y="Total CNV span (log Kb)")+
+  theme_bw() + guides(row = guide_legend(nrow=2)) +
+  theme(legend.position=c(1,1.25),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 5),axis.title = element_text(size = 10),legend.box = "horizontal",
+        legend.background = element_rect(fill="grey",colour = "black"))
+
+theme0 <- function(...) theme( legend.position = "none",
+                               panel.background = element_blank(),
+                               panel.grid.major = element_blank(),
+                               panel.grid.minor = element_blank(),
+                               panel.margin = unit(0,"null"),
+                               axis.ticks = element_blank(),
+                               axis.text.x = element_blank(),
+                               axis.text.y = element_blank(),
+                               axis.title.x = element_blank(),
+                               axis.title.y = element_blank(),
+                               axis.ticks.length = unit(0,"null"),
+                               axis.ticks.margin = unit(0,"null"),
+                               panel.border=element_rect(color=NA),...)
+
+p2 <- ggplot(cnvpheno,aes(x=total_cnvs,colour=factor(trisomy),fill=factor(trisomy))) + 
+  geom_density(alpha=0.5) + 
+  scale_color_manual(values=c('gray21','red'))+
+  scale_fill_manual(values=c('gray21','red'))+
+  scale_x_continuous(breaks=NULL,expand=c(0.00,0)) +
+  scale_y_continuous(breaks=NULL,expand=c(0.00,0)) +
+  theme_bw() +
+  theme0(plot.margin = unit(c(0,0,0.5,2),"lines")) 
+
+p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(trisomy))) + 
+  geom_density(alpha=0.5) + 
+  scale_color_manual(values=c('gray21','red'))+
+   scale_fill_manual(values=c('gray21','red'))+
+  coord_flip()  + 
+  scale_x_continuous(labels = NULL,breaks=NULL,expand=c(0.02,0)) +
+  scale_y_continuous(labels = NULL,breaks=NULL,expand=c(0.00,0)) +
+  theme_bw() +
+  theme0(plot.margin = unit(c(0,0,1.75,1),"lines"))
+
+#setEPS()
+#postscript("CNV_fig1.eps",width=8,height=8) #eps format loses shading
+
+png(filename = "fig1_CNV.png",
+    width = 960, height = 960, units = "px", pointsize = 12,
+    bg = "white", res = 300)
+
+ grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
+             arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
+             heights=c(1,3))
+
+
+dev.off()
+
+##############################################################################
+```
+
+```{r for.Fig2, echo=FALSE}
+#-----------------------------------------------------------------------------#
+
+# Figure 2 shows PLI score with global neurodev scale
+# Otherwise same as figure 1
+# Scatter plot with marginal histograms 
+# Used colour to depict twin/SCT and fill to depict bias - use settings from fig 1
+
+cnvpheno$neurodev_jittered <- jitter(cnvpheno$global_neurodev)+.2
+p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=neurodev_jittered,colour=trisomy,shape=bias_fac))+
+  scale_shape_manual(values=shapelist)+
+   scale_color_manual(values=c('gray21','red'))+
+  geom_point()+
+  scale_x_continuous(expand=c(0.02,0)) +
+  scale_y_continuous(expand=c(0.02,0)) +
+ labs(x = "Total pLI (all CNVs)",y="Global neurodev. impairment")+
   theme_bw() + guides(row = guide_legend(nrow=2)) +
   theme(legend.position=c(.9,1.26),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 8),axis.title = element_text(size = 10),legend.box = "horizontal",
         legend.background = element_rect(fill = "grey", colour = "black"))
@@ -369,7 +439,7 @@ p2 <- ggplot(cnvpheno,aes(x=sum_pLi,colour=factor(trisomy),fill=factor(trisomy))
   theme_bw() +
   theme0(plot.margin = unit(c(0,0,0.5,2),"lines")) 
 
-p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(trisomy))) + 
+p3 <- ggplot(cnvpheno,aes(x=global_neurodev,colour=factor(trisomy),fill=factor(trisomy))) + 
   geom_density(alpha=0.5) + 
   scale_color_manual(values=c('gray21','red'))+
    scale_fill_manual(values=c('gray21','red'))+
@@ -382,7 +452,7 @@ p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(tr
 #setEPS()
 #postscript("CNV_fig1.eps",width=8,height=8) #eps format loses shading
 
-png(filename = "fig1_CNV.png",
+png(filename = "fig2_CNV.png",
     width = 960, height = 960, units = "px", pointsize = 12,
     bg = "white", res = 300)
 
