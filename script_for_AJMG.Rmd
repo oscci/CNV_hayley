@@ -242,7 +242,7 @@ cnvpheno$is.trisomy<-as.factor(cnvpheno$is.trisomy)
 ```{r visualise.dists, echo=FALSE,fig.height=8,fig.width=8}
 #-----------------------------------------------------------------------------#
 
-png("scatterplot_CNV.png")
+
 # Scatter plot with marginal histograms 
 # I have used the raw rather than censored values for the plot (but they only go up to 8?)
 # Have taken log for kBp to aid visualisation
@@ -311,11 +311,90 @@ p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(tr
              heights=c(1,3))
 
 
+
+##############################################################################
+```
+```{r for.Fig1, echo=FALSE}
+#-----------------------------------------------------------------------------#
+
+
+# Scatter plot with marginal histograms 
+# I have used the raw rather than censored values for the plot (but they only go up to 8?)
+# Have taken log for kBp to aid visualisation
+# Used colour to depict twin/SCT and shape to depict bias and whether patho CNV
+
+# Create factor variables for group and bias
+cnvpheno$trisomy<-factor(cnvpheno$is.trisomy)
+levels(cnvpheno$trisomy) <- c('Comparison','Trisomy')
+
+cnvpheno$bias_fac<-as.factor(cnvpheno$bias)
+shapelist<-c(19,1) #shapes 
+#This variable allows mapping of shape and fill as follows:
+# bias = unfilled circle
+# no Bias = filled circle
+
+levels(cnvpheno$bias_fac) <- c('Low bias' ,'High Bias')
+
+p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=log(total_Kbp),colour=trisomy,shape=bias_fac))+
+  scale_shape_manual(values=shapelist)+
+   scale_color_manual(values=c('gray21','red'))+
+  geom_point()+
+  scale_x_continuous(expand=c(0.02,0)) +
+  scale_y_continuous(expand=c(0.02,0)) +
+ labs(x = "Total pLI (all CNVs)",y="Total CNV span (log Kb)")+
+  theme_bw() + guides(row = guide_legend(nrow=2)) +
+  theme(legend.position=c(.9,1.26),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 8),axis.title = element_text(size = 10),legend.box = "horizontal",
+        legend.background = element_rect(fill = "grey", colour = "black"))
+
+theme0 <- function(...) theme( legend.position = "none",
+                               panel.background = element_blank(),
+                               panel.grid.major = element_blank(),
+                               panel.grid.minor = element_blank(),
+                               panel.margin = unit(0,"null"),
+                               axis.ticks = element_blank(),
+                               axis.text.x = element_blank(),
+                               axis.text.y = element_blank(),
+                               axis.title.x = element_blank(),
+                               axis.title.y = element_blank(),
+                               axis.ticks.length = unit(0,"null"),
+                               axis.ticks.margin = unit(0,"null"),
+                               panel.border=element_rect(color=NA),...)
+
+p2 <- ggplot(cnvpheno,aes(x=sum_pLi,colour=factor(trisomy),fill=factor(trisomy))) + 
+  geom_density(alpha=0.5) + 
+  scale_color_manual(values=c('gray21','red'))+
+  scale_fill_manual(values=c('gray21','red'))+
+  scale_x_continuous(breaks=NULL,expand=c(0.00,0)) +
+  scale_y_continuous(breaks=NULL,expand=c(0.00,0)) +
+  theme_bw() +
+  theme0(plot.margin = unit(c(0,0,0.5,2),"lines")) 
+
+p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(trisomy))) + 
+  geom_density(alpha=0.5) + 
+  scale_color_manual(values=c('gray21','red'))+
+   scale_fill_manual(values=c('gray21','red'))+
+  coord_flip()  + 
+  scale_x_continuous(labels = NULL,breaks=NULL,expand=c(0.02,0)) +
+  scale_y_continuous(labels = NULL,breaks=NULL,expand=c(0.00,0)) +
+  theme_bw() +
+  theme0(plot.margin = unit(c(0,0,1.75,1),"lines"))
+
+#setEPS()
+#postscript("CNV_fig1.eps",width=8,height=8) #eps format loses shading
+
+png(filename = "fig1_CNV.png",
+    width = 960, height = 960, units = "px", pointsize = 12,
+    bg = "white", res = 300)
+
+ grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
+             arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
+             heights=c(1,3))
+
+
 dev.off()
 
 ##############################################################################
 ```
-
 
 ```{r corrcnv,echo=TRUE}
 mycor <- rcorr(as.matrix(cbind(cnvpheno$total_cnvs,cnvpheno$total_Kbp,cnvpheno$sum_pLi_C)),type='pearson')
