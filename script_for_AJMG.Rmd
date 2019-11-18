@@ -5,9 +5,14 @@ date: "18/11/2019"
 output: html_document
 ---
 
+Document based on pre-registered analysis by Mountford et al:
+https://osf.io/u2j97
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 # many of these functions copied from CNV_for_protocol
+
+require(synthpop) #used to create synthetic dataset
 require(tidyverse)
 require(stringr)
 require(plyr)
@@ -35,10 +40,15 @@ Github repository is CNV_Hayley
 
 R project is CNV_Hayley.Rproj on deevybee_repo
 
-Protocol is CNV_for_protocol.rmd from Jun 16 2018
+Original protocol is CNV_for_protocol.rmd from Jun 16 2018
 
-Manuscript draft is with oscci manuscripts in folder hayley cnv, as Trisomy_CNV_AJMG_v1_DB 
+Manuscript draft is with oscci manuscripts in folder hayley cnv, as Trisomy_CNV_AJMG_v2_DB 
 
+For this OSF version we will read the data from a pre-merged file.
+However, the original chunk for doing the merging is retained here, but not run.
+(To run it, need to set readoriginal <- 1 at the top of the chunk).
+
+Further information that is only key if you need to set readoriginal to 1:
 Data on CNVs now in same folder as R project; original xls file from Dianne, with parental concern variable, is saved as 2 worksheets in csv – one for autosomes and one for X chromosome
 all_samples_results_parco.csv
 all_samples_results_Xchrom.csv
@@ -47,10 +57,16 @@ These need to have name codes changed to match our codes by stripping off DB and
 
 Remember to set working directory to source file location
 
-NB famsplangconc coded as 1 if any concern about speech/language in either twin. (May be co-twin to the proband) - some of these were coded N/A in Di's file - have updated these manually.
+NB famsplangconc coded as 1 if any concern about speech/language in either twin. (Concern may be about the co-twin to the proband) - some of these were coded N/A in Di's file - have updated these manually.
 
 
 ```{r readfiles}
+readoriginal <- 2 #set to one if you want to recreate merged cnvpheno file from original files
+  #set to 0 to read true data (cnvpheno.csv)
+  #set to 2 to read synthetic data (cnv_syn.csv)
+makesyn <- 0 #set to 1 to create a synthetic dataset (see end of chunk)
+
+if (readoriginal==1){
 cnvdat<-read.csv('all_samples_results_parco_corrected.csv',stringsAsFactors=FALSE)
 cnvdatx<-read.csv('all_samples_results_Xchrom.csv',stringsAsFactors=FALSE)
 
@@ -127,13 +143,7 @@ cnvpheno$is.trisomy <-1
 w<-which(cnvpheno$Group=='twin')
 cnvpheno$is.trisomy[w]<-0 
 
-
-```
-
-We now have a file with the phenotype and genotype data together.  
-First thing that is needed is Table 1, showing Ns in relation to ascertainment bias.
-```{r table1}
-
+#code bias group
 cnvpheno$bias<-cnvpheno$famsplangconc #default from twin code for family bias
 
 w<-which(cnvpheno$Group !='twin')
@@ -141,201 +151,61 @@ cnvpheno$bias[w]<-0 #default no bias for trisomies
 w<-c(which(cnvpheno$why_tested==2),which(cnvpheno$why_tested==3))
 cnvpheno$bias[w]<-1
 
-mytab<- table(cnvpheno$groupfem,cnvpheno$bias)
-
-# Add a variable to identify those with pathogenic cnvs
-patholist <-c('085','613A','244','679A','066','339','348','257','134','355','668B','869B','664B','874A','131','639A')
-w<-which(cnvpheno$id %in% patholist)
-cnvpheno$pathoCNV <-0
-cnvpheno$pathoCNV[w] <-1
-
 write.csv(cnvpheno,'cnvpheno.csv',row.names=FALSE) #saved copy of file
 
+if(makesyn==1){
+#now create synthetic dataset to preserve confidentiality
+mysyn<-syn(cnvpheno[,c(42,44:52,54:60,62:64)])$syn #create synthetic dataset
+write.csv(mysyn,'cnv_syn_OSF.csv',row.names=FALSE)
+}
+}
+
 ```
+
+We now have a file with the phenotype and genotype data together.  
+First thing that is needed is Table 1, showing Ns in relation to ascertainment bias.
+
+```{r table1}
+
+
+if(readoriginal==0){
+  cnvpheno <- read.csv('cnvpheno.csv',stringsAsFactors=FALSE)
+}
+if(readoriginal==2 ){ #read synthesised data}
+  cnvpheno <- read.csv('cnv_syn.csv',stringsAsFactors=FALSE)
+}
+mytab<- table(cnvpheno$groupfem,cnvpheno$bias)
+mytab
+
+```
+
 The derivation of the global neurodevelopmental index is now provided in the paper in Table 2.
 (In this version we use original scores, so high score represents poor functioning. 
 
 
 
-```{r cnv.check, echo=TRUE}
-##############################################################################
 
-
-plot(jitter(cnvpheno$total_cnvs),cnvpheno$sum_pLi)
-abline(a=0,b=1) # not sure how sum_pLi can be bigger than total_cnvs. But there's a different variable called no_pLi. Need to check with Hayley/Di
-
-```
-
-```{r original.cnvplot}
-# Create a censored version of sum_pLi to fix top of scale at 7
-# Censored variable is sum_pLi_C
-#Function borrowed and adapted from the 'scales' package. This applies the censoring to the two potentially interesting variables.
-#str(cnvpheno) #uncomment to inspect variables
-censor_PT<-function (x, limit = 7, only.finite = TRUE) 
-{
-  force(range)
-  finite <- if (only.finite) 
-    is.finite(x)
-  else TRUE
-  x[finite & x > limit] <- limit+1
-  x
-}
-
-cnvpheno$sum_pLi_C<-censor_PT(cnvpheno$sum_pLi,limit=7,only.finite = F)
-#cnvpheno$total_Kbp_C<-censor_PT(cnvpheno$total_Kbp,limit=3000,only.finite = F)
-#mytab<-table(cnvpheno$sum_pLi,cnvpheno$sum_pLi_C)
-#plot(cnvpheno$sum_pLi,cnvpheno$sum_pLi_C) #show effect of censoring
-
-#hist(cnvpheno$sum_pLi_C) #NB still v skewed
-
-
-
-#-----------------------------------------------------------------------------#
-p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=sum_pLi_C)) + geom_point() +
-  scale_x_continuous(expand=c(0.02,0)) +
-  scale_y_continuous(expand=c(0.02,0)) +
-  theme_bw() +
-  theme(legend.position="none",plot.margin=unit(c(1,1,1,1),"points"))
-
-theme0 <- function(...) theme( legend.position = "none",
-                               panel.background = element_blank(),
-                               panel.grid.major = element_blank(),
-                               panel.grid.minor = element_blank(),
-                               panel.margin = unit(0,"null"),
-                               axis.ticks = element_blank(),
-                               axis.text.x = element_blank(),
-                               axis.text.y = element_blank(),
-                               axis.title.x = element_blank(),
-                               axis.title.y = element_blank(),
-                               axis.ticks.length = unit(0,"null"),
-                               axis.ticks.margin = unit(0,"null"),
-                               panel.border=element_rect(color=NA),...)
-
-p2 <- ggplot(cnvpheno,aes(x=sum_pLi)) + 
-  geom_density(alpha=0.5) + 
-  scale_x_continuous(breaks=NULL,expand=c(0.02,0)) +
-  scale_y_continuous(breaks=NULL,expand=c(0.00,0)) +
-  theme_bw() +
-  theme0(plot.margin = unit(c(0,-1,0.5,1.5),"lines")) 
-
-p3 <- ggplot(cnvpheno,aes(x=sum_pLi_C)) + 
-  geom_density(alpha=0.5) + 
-  coord_flip()  + 
-  scale_x_continuous(labels = NULL,breaks=NULL,expand=c(0.02,0)) +
-  scale_y_continuous(labels = NULL,breaks=NULL,expand=c(0.00,0)) +
-  theme_bw() +
-  theme0(plot.margin = unit(c(0,0,1.75,1),"lines"))
-
-#mylegend<-g_legend(p1)  #This throws error, even after installing lemon
-
-grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
-             arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
-             heights=c(1,3))
-
-
-cnvpheno$is.trisomy<-as.factor(cnvpheno$is.trisomy)
-#-----------------------------------------------------------------------------#
-```
-
-
-
-```{r visualise.dists, echo=FALSE,fig.height=8,fig.width=8}
-#-----------------------------------------------------------------------------#
-
-
-# Scatter plot with marginal histograms 
-# I have used the raw rather than censored values for the plot (but they only go up to 8?)
-# Have taken log for kBp to aid visualisation
-# Used colour to depict twin/SCT and shape to depict bias and whether patho CNV
-
-# Create factor variables for group and bias
-cnvpheno$trisomy<-factor(cnvpheno$is.trisomy)
-levels(cnvpheno$trisomy) <- c('Twin','Trisomy')
-
-cnvpheno$bias_path<-as.factor(10*cnvpheno$bias+cnvpheno$pathoCNV)
-shapelist<-c(1,19,0,15) #shapes are unfilled circle, filled circle, unfilled sq, filled sq
-#This variable allows mapping of shape and fill as follows:
-# No bias, no pathoCNV = unfilled circle
-# No bias, pathoCNV = filled circle
-# Bias, no pathoCNV = unfilled square
-# Bias, pathoCNV = filled square
-levels(cnvpheno$bias_path) <- c('No bias, no pathoCNV','No bias, pathoCNV','Bias, no pathoCNV','Bias, pathoCNV')
-
-p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=log(total_Kbp),colour=trisomy,shape=bias_path))+
-  scale_shape_manual(values=shapelist)+
-   scale_color_manual(values=c('gray21','red'))+
-  geom_point()+
-  scale_x_continuous(expand=c(0.02,0)) +
-  scale_y_continuous(expand=c(0.02,0)) +
-
-  theme_bw() + guides(col = guide_legend(ncol = 1)) +
-  theme(legend.position=c(1.2,1.2),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank())
-
-theme0 <- function(...) theme( legend.position = "none",
-                               panel.background = element_blank(),
-                               panel.grid.major = element_blank(),
-                               panel.grid.minor = element_blank(),
-                               panel.margin = unit(0,"null"),
-                               axis.ticks = element_blank(),
-                               axis.text.x = element_blank(),
-                               axis.text.y = element_blank(),
-                               axis.title.x = element_blank(),
-                               axis.title.y = element_blank(),
-                               axis.ticks.length = unit(0,"null"),
-                               axis.ticks.margin = unit(0,"null"),
-                               panel.border=element_rect(color=NA),...)
-
-p2 <- ggplot(cnvpheno,aes(x=sum_pLi,colour=factor(trisomy),fill=factor(trisomy))) + 
-  geom_density(alpha=0.5) + 
-  scale_color_manual(values=c('gray21','red'))+
-  scale_fill_manual(values=c('gray21','red'))+
-  scale_x_continuous(breaks=NULL,expand=c(0.00,0)) +
-  scale_y_continuous(breaks=NULL,expand=c(0.00,0)) +
-  theme_bw() +
-  theme0(plot.margin = unit(c(0,0,0.5,2),"lines")) 
-
-p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(trisomy))) + 
-  geom_density(alpha=0.5) + 
-  scale_color_manual(values=c('gray21','red'))+
-   scale_fill_manual(values=c('gray21','red'))+
-  coord_flip()  + 
-  scale_x_continuous(labels = NULL,breaks=NULL,expand=c(0.02,0)) +
-  scale_y_continuous(labels = NULL,breaks=NULL,expand=c(0.00,0)) +
-  theme_bw() +
-  theme0(plot.margin = unit(c(0,0,1.75,1),"lines"))
-
-
-
- g0<-grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
-             arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
-             heights=c(1,3))
-
-ggsave("CNV_fig0.pdf",plot=g2,device = 'pdf',dpi = 600,width=6,height=6,units = 'in')
-
-##############################################################################
-```
 ```{r for.Fig1, echo=FALSE}
 #-----------------------------------------------------------------------------#
 
 
 # Scatter plot with marginal histograms 
-# I have used the raw rather than censored values for the plot (but they only go up to 8?)
 # Have taken log for kBp to aid visualisation
-# Used colour to depict twin/SCT and shape to depict bias and whether patho CNV
+# Used colour to depict twin/SCT and fill to depict low bias
 
 # Create factor variables for group and bias
 cnvpheno$trisomy<-factor(cnvpheno$is.trisomy)
 levels(cnvpheno$trisomy) <- c('Comparison','Trisomy')
 
 cnvpheno$bias_fac<-as.factor(cnvpheno$bias)
-shapelist<-c(19,1) #shapes 
+shapelist<-c(19,1)  
 #This variable allows mapping of shape and fill as follows:
 # bias = unfilled circle
 # no Bias = filled circle
 
 levels(cnvpheno$bias_fac) <- c('Low bias' ,'High Bias')
-cnvpheno$jitter_cnv<-jitter(cnvpheno$total_cnvs)+.2
-p1 <- ggplot(cnvpheno,aes(y=log(total_Kbp),x=jitter_cnv,colour=trisomy,shape=bias_fac))+
+cnvpheno$jitter_cnv<-jitter(cnvpheno$total_cnvs)+.2 #add .2 to avoid negative value
+p1 <- ggplot(cnvpheno,aes(y=log(total_Kbp+1),x=jitter_cnv,colour=trisomy,shape=bias_fac))+
   scale_shape_manual(values=shapelist)+
    scale_color_manual(values=c('gray21','red'))+
   geom_point()+
@@ -367,9 +237,9 @@ p2 <- ggplot(cnvpheno,aes(x=total_cnvs,colour=factor(trisomy),fill=factor(trisom
   scale_x_continuous(breaks=NULL,expand=c(0.00,0)) +
   scale_y_continuous(breaks=NULL,expand=c(0.00,0)) +
   theme_bw() +
-  theme0(plot.margin = unit(c(0,0,0.5,2),"lines")) 
+  theme0(plot.margin = unit(c(0,0,0,2),"lines")) 
 
-p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(trisomy))) + 
+p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp+1),colour=factor(trisomy),fill=factor(trisomy))) + 
   geom_density(alpha=0.5) + 
   scale_color_manual(values=c('gray21','red'))+
    scale_fill_manual(values=c('gray21','red'))+
@@ -377,24 +247,23 @@ p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(tr
   scale_x_continuous(labels = NULL,breaks=NULL,expand=c(0.02,0)) +
   scale_y_continuous(labels = NULL,breaks=NULL,expand=c(0.00,0)) +
   theme_bw() +
-  theme0(plot.margin = unit(c(0,0,1.75,1),"lines"))
+  theme0(plot.margin = unit(c(0,0,1.75,0),"lines"))
 
-#setEPS()
-#postscript("CNV_fig1.eps",width=8,height=8) #eps format loses shading
-
-#png(filename = "fig1_CNV.png",
-#    width = 960, height = 960, units = "px", pointsize = 12,
- #   bg = "white", res = 300)
+#assemble the 3 plots in a grid
 
  g1<-grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
              arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
              heights=c(1,3))
+g1
+ #ggsave preserves appearance of plot. 
+ggsave("CNV_fig1.png",plot=g1,device = 'png',dpi = 600,width=4.5,height=4,units = 'in')
 
-ggsave("CNV_fig1.pdf",plot=g1,device = 'pdf',dpi = 600,width=6,height=6,units = 'in')
-#dev.off()
+# The figure we've just created is displayed in the Markdown document
 
 ##############################################################################
 ```
+
+![Figure 1](CNV_fig1.png)
 
 ```{r for.Fig2, echo=FALSE}
 #-----------------------------------------------------------------------------#
@@ -413,8 +282,8 @@ p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=neurodev_jittered,colour=trisomy,shape=bia
   scale_y_continuous(expand=c(0.02,0)) +
  labs(x = "Total pLI (all CNVs)",y="Global neurodev. impairment")+
   theme_bw() + guides(row = guide_legend(nrow=2)) +
-  theme(legend.position=c(.9,1.26),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 8),axis.title = element_text(size = 10),legend.box = "horizontal",
-        legend.background = element_rect(fill = "grey", colour = "black"))
+  theme(legend.position=c(1,1.25),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 8),axis.title = element_text(size = 10),legend.box = "horizontal",
+        legend.background = element_rect(fill="grey",colour = "black"))
 
 theme0 <- function(...) theme( legend.position = "none",
                                panel.background = element_blank(),
@@ -437,7 +306,7 @@ p2 <- ggplot(cnvpheno,aes(x=sum_pLi,colour=factor(trisomy),fill=factor(trisomy))
   scale_x_continuous(breaks=NULL,expand=c(0.00,0)) +
   scale_y_continuous(breaks=NULL,expand=c(0.00,0)) +
   theme_bw() +
-  theme0(plot.margin = unit(c(0,0,0.5,2),"lines")) 
+  theme0(plot.margin = unit(c(0,0,0,2),"lines")) 
 
 p3 <- ggplot(cnvpheno,aes(x=global_neurodev,colour=factor(trisomy),fill=factor(trisomy))) + 
   geom_density(alpha=0.5) + 
@@ -447,33 +316,23 @@ p3 <- ggplot(cnvpheno,aes(x=global_neurodev,colour=factor(trisomy),fill=factor(t
   scale_x_continuous(labels = NULL,breaks=NULL,expand=c(0.02,0)) +
   scale_y_continuous(labels = NULL,breaks=NULL,expand=c(0.00,0)) +
   theme_bw() +
-  theme0(plot.margin = unit(c(0,0,1.75,1),"lines"))
+  theme0(plot.margin = unit(c(0,0,1.75,0),"lines"))
 
-#setEPS()
-#postscript("CNV_fig1.eps",width=8,height=8) #eps format loses shading
 
-# png(filename = "fig2_CNV.png",
-#     width = 960, height = 960, units = "px", pointsize = 12,
-#     bg = "white", res = 300)
 
 g2<- grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
              arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
              heights=c(1,3))
 
-ggsave("CNV_fig2.pdf",plot=g2,device = 'pdf',dpi = 600,width=6,height=6,units = 'in')
-#dev.off()
+ggsave("CNV_fig2.png",plot=g2,device = 'png',dpi = 600,width=4.5,height=4,units = 'in')
+
+
 
 ##############################################################################
 ```
+![Figure 2](CNV_fig2.png)
 
-```{r corrcnv,echo=TRUE}
-mycor <- rcorr(as.matrix(cbind(cnvpheno$total_cnvs,cnvpheno$total_Kbp,cnvpheno$sum_pLi_C)),type='pearson')
-rtab<-round(mycor$r,3)
-colnames(rtab) <- c('total cnv','total Kbp','sum pLi')
-rownames(rtab) <- c('total cnv','total Kbp','sum pLi')
 
-knitr::kable(rtab,Caption='Correlations between CNV measures')
-```
 
 Next we consider how well the different measures differentiate between the groups. Because the data is non-normal, a Wilcoxon rank sum test is used. In a preliminary analysis, we analyse each dependent measure separately.
 
@@ -483,16 +342,10 @@ Next we consider how well the different measures differentiate between the group
 #Multiple testing: Wilcoxon sum rank test, one-tailed
 dowilcox <- function(mydf){
 BF_correct_alpha<-0.05/3
-#print('Total CNVs')
-
 w1<-wilcox.test(total_cnvs~is.trisomy,data=mydf,alternative=c("less"),conf.int=TRUE)
-#print(list(p.value=w1$p.value,corrected.alpha=BF_correct_alpha,res=w1$p.value<=BF_correct_alpha))
-#print('Total Kbp')
 w2<-wilcox.test(total_Kbp~is.trisomy,data=mydf,alternative=c("less"),conf.int=TRUE)
-#print(list(p.value=w2$p.value,corrected.alpha=BF_correct_alpha,res=w2$p.value<=BF_correct_alpha))
-#print('sum pLi')
-w3<-wilcox.test(sum_pLi_C~is.trisomy,data=mydf,alternative=c("less"),conf.int=TRUE)
-#print(list(p.value=w3$p.value,corrected.alpha=BF_correct_alpha,res=w3$p.value<=BF_correct_alpha))
+w3<-wilcox.test(sum_pLi~is.trisomy,data=mydf,alternative=c("less"),conf.int=TRUE)
+
 
 #Corrections for multiple testing
 
@@ -508,9 +361,10 @@ return(res)}
 
 ```
 
-Hayley had done analysis using permutation analysis in PLINK. We can achieve the same results in R. N.B. This was not the pre-registered analysis, though it could be argued that it is a reasonable one to do.
+Hayley had done analysis using permutation analysis in PLINK. We can achieve the same results in R. N.B. 
+This was not the pre-registered analysis, though it could be argued that it is a reasonable one to do. The results do differ from Wilcoxon - we think this is to do with how the different methods handle ties.
 
-Here is a function to do that (thanks to Paul Thompson for this)
+Here is a function to do that
 
 ```{r permtest}
 #Multiple testing: permutation test, one-tailed
@@ -533,28 +387,27 @@ return(res)}
 
 ```
 
-
-
-
 ```{r makeresultstabs}
 
+cnvpheno$is.trisomy<-as.factor(cnvpheno$is.trisomy)
 # Divide data into 2 sets; with and without bias
 w<-which(cnvpheno$bias==1)
 bias.set<-cnvpheno[w,]
 nobias.set<-cnvpheno[-w,]
 
-res <-dowilcox(cnvpheno)
-knitr::kable(res, caption='Wilcoxon: All cases')
+resw1 <-dowilcox(cnvpheno)
+knitr::kable(resw1, caption='Wilcoxon: All cases')
 
-res1 <-dowilcox(nobias.set)
-knitr::kable(res1, caption='Wilcoxon: Low bias cases')
+resw2 <-dowilcox(nobias.set)
+knitr::kable(resw2, caption='Wilcoxon: Low bias cases')
 
-res2<-doperm(cnvpheno)
-knitr::kable(res2, caption='Permutation: All cases')
+resp1<-doperm(cnvpheno)
+knitr::kable(resp1, caption='Permutation: All cases')
 
-res3<-doperm(nobias.set)
-knitr::kable(res3, caption='Permutation: Low bias cases')
+resp2<-doperm(nobias.set)
+knitr::kable(resp2, caption='Permutation: Low bias cases')
 
+print('All cases')
 by_group<-cnvpheno %>% group_by(is.trisomy)
 groupmeans<-dplyr::summarise(by_group,
   mean_cnvs = round(mean(total_cnvs),2),
@@ -566,6 +419,7 @@ groupmeans<-dplyr::summarise(by_group,
 )
 groupmeans
 
+print('Low Bias')
 by_group2<-nobias.set %>% group_by(is.trisomy)
 groupmeans2<-dplyr::summarise(by_group2,
   mean_cnvs = round(mean(total_cnvs),2),
@@ -580,29 +434,52 @@ groupmeans2
 ```
 
 ```{r makemaintable}
-maintab <- data.frame(matrix(NA,nrow=7,ncol=9))
-colnames(maintab)<- c('Measure','Mean.SCT','SD.SCT','Mean.Comp','SD.Comp','Wilcoxon.p','Perm.exact.p','BY-corrected.p','BY.2')
-
-
-maintabx <-data.frame(matrix(NA,nrow=10,ncol=7))
-colnames(maintabx)<-c('.','N CNV','CNV span (Kb)','Total pLI score','N CNV.x','CNV span (Kb).x','Total pLI score.x')
-maintabx[,1]<-c('N SCT','Mean SCT','SD SCT','N Comparison','Mean Comparison','SD Comparison','Wilcoxon p','Permutation p','BY-corrected p','BY2')
+maintab <- data.frame(matrix(NA,nrow=9,ncol=6))
+colnames(maintab)<- c('Measure','SCT','Comparison','.','p-values','..')
+maintab[,1]<-c('N Whole sample','CNV per individual','CNV total span (Kb)','Total pLI score','.','N low bias subset','CNV per individual','CNV total span (Kb)','Total pLI score')
 
 #can take Ns from original Table 1 (mytab)
 Nsct<-sum(mytab[3:5,1:2])
 Ntwin<-sum(mytab[1:2,1:2])
 Nsct.x<-sum(mytab[3:5,1])
 Ntwin.x<-sum(mytab[1:2,1])
-maintabx[1,2:7]<-c(Nsct,Nsct,Nsct,Nsct.x,Nsct.x,Nsct.x)
-maintabx[4,2:7]<-c(Ntwin,Ntwin,Ntwin,Ntwin.x,Ntwin.x,Ntwin.x)
-maintabx[2,2:7]<-c(groupmeans[2,2],groupmeans[2,4],groupmeans[2,6],
-                   groupmeans2[2,2],groupmeans2[2,4],groupmeans2[2,6])
-maintabx[3,2:7]<-c(groupmeans[2,3],groupmeans[2,5],groupmeans[2,7],
-                   groupmeans2[2,3],groupmeans2[2,5],groupmeans2[2,7])
-maintabx[5,2:7]<-c(groupmeans[1,2],groupmeans[1,4],groupmeans[1,6],
-                   groupmeans2[1,2],groupmeans2[1,4],groupmeans2[1,6])
-maintabx[6,2:7]<-c(groupmeans[1,3],groupmeans[1,5],groupmeans[1,7],
-                   groupmeans2[1,3],groupmeans2[1,5],groupmeans2[1,7])
+
+maintab[1,2]<-Nsct
+maintab[1,3]<-Ntwin
+maintab[6,2]<-Nsct.x
+maintab[6,3]<-Ntwin.x
+
+maintab[1,4]<-'Wilcoxon'
+maintab[1,5]<-'Permutation'
+maintab[1,6]<-'BY corrected'
+
+maintab[2,2]<-paste0(groupmeans[2,2],' (',groupmeans[2,3],')')
+maintab[2,3]<-paste0(groupmeans[1,2],' (',groupmeans[1,3],')')
+
+maintab[3,2]<-paste0(groupmeans[2,4],' (',groupmeans[2,5],')')
+maintab[3,3]<-paste0(groupmeans[1,4],' (',groupmeans[1,5],')')
+
+maintab[4,2]<-paste0(groupmeans[2,6],' (',groupmeans[2,7],')')
+maintab[4,3]<-paste0(groupmeans[1,6],' (',groupmeans[1,7],')')
+
+maintab[7,2]<-paste0(groupmeans2[2,2],' (',groupmeans2[2,3],')')
+maintab[7,3]<-paste0(groupmeans2[1,2],' (',groupmeans2[1,3],')')
+
+maintab[8,2]<-paste0(groupmeans2[2,4],' (',groupmeans2[2,5],')')
+maintab[8,3]<-paste0(groupmeans2[1,4],' (',groupmeans2[1,5],')')
+
+maintab[9,2]<-paste0(groupmeans2[2,6],' (',groupmeans2[2,7],')')
+maintab[9,3]<-paste0(groupmeans2[1,6],' (',groupmeans2[1,7],')')
+
+maintab[2:4,4]<-resw1[1:3,1]
+maintab[7:9,4]<-resw2[1:3,1]
+maintab[2:4,5:6]<-resp1[1:3,1:2]
+maintab[7:9,5:6]<-resp2[1:3,1:2]
+
+write.csv(maintab,'Table3.csv',row.names=FALSE)
+
+#This table can be opened in Word.
+# Needs editing (change comma to tab, remove quotes and NA, but can then do convert text to table, and minor formatting)
 ```
 
 
@@ -638,83 +515,3 @@ anova(m2, m1, test="Chisq")
 
 #-----------------------------------------------------------------------------#
 ```
-Added bits by DB, Nov 2019.
-Just recreating Hayley's analysis of burden.
-(Ignore this for now)
-
-```{r burdentable}
-
-
-#make data frame to hold summary results
-mydf<-data.frame(matrix(NA,nrow=10,ncol=7))
-colnames(mydf)<-c('Variable','All SCT','All twin','Low bias SCT','Low bias twin','High bias SCT','High bias twin')
-
-temptab<-table(cnvpheno$is.trisomy,cnvpheno$bias)
-mydf[1,1]<-'N'
-mydf[1,4]<-temptab[2,1]
-mydf[1,5]<-temptab[1,1]
-mydf[1,6]<-temptab[2,2]
-mydf[1,7]<-temptab[1,2]
-mydf[1,2]<-mydf[1,4]+mydf[1,6]
-mydf[1,3]<-mydf[1,5]+mydf[1,7]
-
-myvarlist<-c('total_cnvsX','total_cnvs','total_Kbp')
-varcols<-which(colnames(cnvpheno)%in% myvarlist)
- myagg<-aggregate(cnvpheno[,varcols],by=list(cnvpheno$is.trisomy,cnvpheno$bias),FUN=sum,na.rm=TRUE)
- 
- colnames(myagg)[1:2]<-c('Trisomy','Bias')
- myagg$Trisomy<-as.character(myagg$Trisomy)
- myagg[5,1]<-'All twin'
-myagg[5,2]<-'-'
- myagg[6,1]<-'All trisomy'
-myagg[6,2]<-'-'
- myagg[5,3]<-sum(myagg[c(1,3),3])
-  myagg[5,4]<-sum(myagg[c(1,3),4])
-   myagg[5,5]<-sum(myagg[c(1,3),5])
-    myagg[6,3]<-sum(myagg[c(2,4),3])
-  myagg[6,4]<-sum(myagg[c(2,4),4])
-   myagg[6,5]<-sum(myagg[c(2,4),5])
- 
-   myagg$N[1:6] <- as.numeric(mydf[1,c(5,4,7,6,3,2)])
-    myagg$avgburden<- myagg$total_cnvs/myagg$N
-      myagg$avgspan<- myagg$total_Kbp/myagg$N
-    
-   
- 
-maketable<-function(mydf,mylabel,myrow,myvar1){
-thiscol<-which(colnames(cnvpheno)==myvar1)
-  mydf[myrow,1]<-mylabel
-
-  mydf[myrow,2]<-sum(dplyr::filter(cnvpheno[,thiscol],myvar1==1))
-  mydf[myrow,3]<-sum(dplyr::filter(cnvpheno,myvar1==0))
-    mydf[myrow,4]<-nrow(dplyr::filter(nobias.set,myvar1==1))
-  mydf[myrow,5]<-nrow(dplyr::filter(nobias.set,myvar1==0))
-    mydf[myrow,6]<-nrow(dplyr::filter(bias.set,myvar1==1))
-  mydf[myrow,7]<-nrow(dplyr::filter(bias.set,myvar1==0))
- 
-}
-
-mylabel='N'
-myrow=1
-myvar1='total_cnvs'
-maketable(mydf,mylabel,myrow,myvar1)
-```
-
-
-```{r bit}
-#do pirate-plots
-pirateplot(log(1+cnvpheno$total_cnvs)~cnvpheno$bias*cnvpheno$is.trisomy,data=cnvpheno)
-pirateplot(log(1+cnvpheno$total_Kbp)~cnvpheno$bias*cnvpheno$is.trisomy,data=cnvpheno)
-
-#As explained in the paper, the X chromosome is a bit of a nightmare if you have 3 Xs!
-pirateplot(log(1+log(1+cnvpheno$total_KbpX))~cnvpheno$bias*cnvpheno$is.trisomy*cnvpheno$female,data=cnvpheno)
-```
-
-```{r checkpathocases}
-
-
-```w<-which(cnvpheno$pathoCNV==1)
-temp<-cnvpheno[w,]
-View(temp)
-temp2<-temp[,c(1,42:60)]
-temp2
