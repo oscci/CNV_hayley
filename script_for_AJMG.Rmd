@@ -1,7 +1,7 @@
 ---
 title: "script_for_AJMG"
-author: "DVM Bishop"
-date: "07/11/2019"
+author: "DVM Bishop + P Thompson"
+date: "18/11/2019"
 output: html_document
 ---
 
@@ -306,11 +306,11 @@ p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(tr
 
 
 
- grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
+ g0<-grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
              arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
              heights=c(1,3))
 
-
+ggsave("CNV_fig0.pdf",plot=g2,device = 'pdf',dpi = 600,width=6,height=6,units = 'in')
 
 ##############################################################################
 ```
@@ -343,7 +343,7 @@ p1 <- ggplot(cnvpheno,aes(y=log(total_Kbp),x=jitter_cnv,colour=trisomy,shape=bia
   scale_y_continuous(expand=c(0.02,0)) +
  labs(x = "N CNVs",y="Total CNV span (log Kb)")+
   theme_bw() + guides(row = guide_legend(nrow=2)) +
-  theme(legend.position=c(1,1.25),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 5),axis.title = element_text(size = 10),legend.box = "horizontal",
+  theme(legend.position=c(1,1.25),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 8),axis.title = element_text(size = 10),legend.box = "horizontal",
         legend.background = element_rect(fill="grey",colour = "black"))
 
 theme0 <- function(...) theme( legend.position = "none",
@@ -382,16 +382,16 @@ p3 <- ggplot(cnvpheno,aes(x=log(total_Kbp),colour=factor(trisomy),fill=factor(tr
 #setEPS()
 #postscript("CNV_fig1.eps",width=8,height=8) #eps format loses shading
 
-png(filename = "fig1_CNV.png",
-    width = 960, height = 960, units = "px", pointsize = 12,
-    bg = "white", res = 300)
+#png(filename = "fig1_CNV.png",
+#    width = 960, height = 960, units = "px", pointsize = 12,
+ #   bg = "white", res = 300)
 
- grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
+ g1<-grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
              arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
              heights=c(1,3))
 
-
-dev.off()
+ggsave("CNV_fig1.pdf",plot=g1,device = 'pdf',dpi = 600,width=6,height=6,units = 'in')
+#dev.off()
 
 ##############################################################################
 ```
@@ -452,16 +452,16 @@ p3 <- ggplot(cnvpheno,aes(x=global_neurodev,colour=factor(trisomy),fill=factor(t
 #setEPS()
 #postscript("CNV_fig1.eps",width=8,height=8) #eps format loses shading
 
-png(filename = "fig2_CNV.png",
-    width = 960, height = 960, units = "px", pointsize = 12,
-    bg = "white", res = 300)
+# png(filename = "fig2_CNV.png",
+#     width = 960, height = 960, units = "px", pointsize = 12,
+#     bg = "white", res = 300)
 
- grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
+g2<- grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
              arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
              heights=c(1,3))
 
-
-dev.off()
+ggsave("CNV_fig2.pdf",plot=g2,device = 'pdf',dpi = 600,width=6,height=6,units = 'in')
+#dev.off()
 
 ##############################################################################
 ```
