@@ -61,10 +61,11 @@ NB famsplangconc coded as 1 if any concern about speech/language in either twin.
 
 
 ```{r readfiles}
-readoriginal <- 2 #set to one if you want to recreate merged cnvpheno file from original files
+readoriginal <- 0 
   #set to 0 to read true data (cnvpheno.csv)
+  #set to 1 if you want to run chunk to recreate merged cnvpheno file from original files
   #set to 2 to read synthetic data (cnv_syn.csv)
-makesyn <- 0 #set to 1 to create a synthetic dataset (see end of chunk)
+makesyn <- 1 #set to 1 to create a synthetic dataset (see end of chunk)
 
 if (readoriginal==1){
 cnvdat<-read.csv('all_samples_results_parco_corrected.csv',stringsAsFactors=FALSE)
@@ -152,13 +153,30 @@ w<-c(which(cnvpheno$why_tested==2),which(cnvpheno$why_tested==3))
 cnvpheno$bias[w]<-1
 
 write.csv(cnvpheno,'cnvpheno.csv',row.names=FALSE) #saved copy of file
-
+}
 if(makesyn==1){
 #now create synthetic dataset to preserve confidentiality
-mysyn<-syn(cnvpheno[,c(42,44:52,54:60,62:64)])$syn #create synthetic dataset
-write.csv(mysyn,'cnv_syn_OSF.csv',row.names=FALSE)
+  # Do this in blocks to preserve number counts
+  r <- 0
+  for (t in 0:1){
+    for (b in 0:1){
+      r<-r+1
+      w1<- which(cnvpheno$is.trisomy==t)
+      w2<- which(cnvpheno$bias==b)
+      w <-intersect(w1,w2)
+      tempsyn<-syn(cnvpheno[w,c(42,44:52,54:60,62:64)])$syn #create synthetic dataset
+      if (r==1){
+        mysyn<-tempsyn
+      }
+      if (r>1){
+        mysyn<-rbind(mysyn,tempsyn)
+      }
+    }
+  }
+
+write.csv(mysyn,'cnv_syn.csv',row.names=FALSE)
 }
-}
+
 
 ```
 
