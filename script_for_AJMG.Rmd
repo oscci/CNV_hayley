@@ -2,11 +2,13 @@
 title: "script_for_AJMG"
 author: "DVM Bishop + P Thompson"
 date: "18/11/2019"
+updated: "01/12/2019"
 output: html_document
 ---
 
 Document based on pre-registered analysis by Mountford et al:
 https://osf.io/u2j97
+Updated 1st Dec 2019 to add comparison of synthetic data to real data.
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -61,11 +63,11 @@ NB famsplangconc coded as 1 if any concern about speech/language in either twin.
 
 
 ```{r readfiles}
-readoriginal <- 0 
+readoriginal <- 1 
   #set to 0 to read true data (cnvpheno.csv)
   #set to 1 if you want to run chunk to recreate merged cnvpheno file from original files
   #set to 2 to read synthetic data (cnv_syn.csv)
-makesyn <- 1 #set to 1 to create a synthetic dataset (see end of chunk)
+makesyn <- 1 #set to 1 to create a synthetic dataset from original data (see end of chunk)
 
 if (readoriginal==1){
 cnvdat<-read.csv('all_samples_results_parco_corrected.csv',stringsAsFactors=FALSE)
@@ -154,9 +156,14 @@ cnvpheno$bias[w]<-1
 
 write.csv(cnvpheno,'cnvpheno.csv',row.names=FALSE) #saved copy of file
 }
+```
+
+```{r makesynthetic}
 if(makesyn==1){
 #now create synthetic dataset to preserve confidentiality
   # Do this in blocks to preserve number counts
+  set.seed(2) #arbitrary seed to ensure synthetic data the same each time
+
   r <- 0
   for (t in 0:1){
     for (b in 0:1){
@@ -164,7 +171,9 @@ if(makesyn==1){
       w1<- which(cnvpheno$is.trisomy==t)
       w2<- which(cnvpheno$bias==b)
       w <-intersect(w1,w2)
-      tempsyn<-syn(cnvpheno[w,c(42,44:52,54:60,62:64)])$syn #create synthetic dataset
+      synobj<-syn(cnvpheno[w,c(62,64,42,44:50,55:60)]) #object including synth dataset - NB do not include is.trisomy as this predictable from groupfem.
+  #Put groupfem and bias as first variables - will be used as predictors
+      tempsyn <- synobj$syn #synthetic dataset
       if (r==1){
         mysyn<-tempsyn
       }
@@ -173,11 +182,36 @@ if(makesyn==1){
       }
     }
   }
-
-write.csv(mysyn,'cnv_syn.csv',row.names=FALSE)
+mysyn$is.trisomy <-1
+w<-c(which(mysyn$groupfem=='twin0'),which(mysyn$groupfem=='twin1'))
+mysyn$is.trisomy[w]<-0
+write.csv(mysyn,'cnv_syn_OSF.csv',row.names=FALSE)
 }
+```
 
+```{r comparefiles}
+#compare combined synthetic data with original
+synobj$syn<-mysyn #substitute combined file in the object 
+synthcom <- synthpop::compare(
+  synobj,
+  cnvpheno,
+  vars = c("global_neurodev", "sum_pLi",
+            "total_cnvs" ,   "total_Kbp"),
+  print.coef = TRUE,
+    stat = "counts",
+  nrow=2, #nrow for plot
+  ncol=2, #ncol for plot
+  cols = c("#62B6CB", "#1B4965")
+) # Visual comparison of original and synthetic datasets
 
+synthcom$tables # Show comparison tables
+synthcom$plots
+
+cnvpheno2 <- cnvpheno[,c(62:64,42,44:50,55:60)]
+ multi.compare(synobj, cnvpheno2,
+                         var = "bias", by = "global_neurodev",binwidth=2)
+ multi.compare(synobj, cnvpheno2,
+                         var = "is.trisomy", by = "global_neurodev",binwidth=2)
 ```
 
 We now have a file with the phenotype and genotype data together.  
@@ -426,7 +460,7 @@ resp2<-doperm(nobias.set)
 knitr::kable(resp2, caption='Permutation: Low bias cases')
 
 print('All cases')
-by_group<-cnvpheno %>% group_by(is.trisomy)
+by_group<-cnvpheno %>% dplyr::group_by(is.trisomy)
 groupmeans<-dplyr::summarise(by_group,
   mean_cnvs = round(mean(total_cnvs),2),
    sd_cnvs = round(sd(total_cnvs),2),
@@ -438,7 +472,7 @@ groupmeans<-dplyr::summarise(by_group,
 groupmeans
 
 print('Low Bias')
-by_group2<-nobias.set %>% group_by(is.trisomy)
+by_group2<-nobias.set %>% dplyr::group_by(is.trisomy)
 groupmeans2<-dplyr::summarise(by_group2,
   mean_cnvs = round(mean(total_cnvs),2),
    sd_cnvs = round(sd(total_cnvs),2),
@@ -532,4 +566,9 @@ m2 <- update(m1, . ~ . - is.trisomy)
 anova(m2, m1, test="Chisq")
 
 #-----------------------------------------------------------------------------#
+```
+
+
+```{r sessinfo, include=TRUE}
+sessionInfo()
 ```
