@@ -229,6 +229,15 @@ if(readoriginal==2 ){ #read synthesised data}
 mytab<- table(cnvpheno$groupfem,cnvpheno$bias)
 mytab
 
+# Added March 2020
+# Add binary code to denote those with pathogenic cnvs
+## TEXT SAYS 7 in TWINS - I can only find 6 as below
+pathocase <- c('639A','664B','668B','679A','869B','874A',
+               '244','257','085','134','355','066','339','131','348')
+w<-which(cnvdat$id %in% pathocase)
+cnvdat$id[w]
+cnvdat$path<-0
+cnvdat$path[w]<-1
 ```
 
 The derivation of the global neurodevelopmental index is now provided in the paper in Table 2.
@@ -568,6 +577,134 @@ anova(m2, m1, test="Chisq")
 #-----------------------------------------------------------------------------#
 ```
 
+## Exploratory analyses requested by reviewers
+Reviewers requested (a) more descriptive data in table 1; (b) analysis stratified by trisomy type (table3); (b) analysis of alternative phenotypes (table4)
+
+```{r moretable1}
+require(psych)
+#Reading in updated version of cnvpheno which included ethnicity
+cnvpheno<- read.csv('cnvpheno2.csv',stringsAsFactors=FALSE)
+#Create 5 categories
+cnvpheno$allgroup<-as.factor(cnvpheno$groupfem)
+levels(cnvpheno$allgroup)<-c('XY','XX','XXX','XXY','XYY')
+#report for all 5 possible groups
+table1a <- data.frame(matrix(NA,nrow=6,ncol=6))
+colnames(table1a)<-c('Variable','XY','XX','XXX','XXY','XYY')
+myN <- table(cnvpheno$allgroup)
+table1a[1,]<-c('N',myN)
+#Add age in row 2
+myaggmean <-aggregate(cnvpheno$age_at_test,by=list(cnvpheno$allgroup),FUN=mean,na.rm=TRUE)
+myaggsd <-aggregate(cnvpheno$age_at_test,by=list(cnvpheno$allgroup),FUN=sd,na.rm=TRUE)
+table1a[2,1]<-'Mean (SD) age (mo)'
+for (i in 1:5){
+table1a[2,(i+1)] <-paste0(round(myaggmean[i,2],1),' (',round(myaggsd[i,2],1),')')
+}
+#Add %white in row 3
+ethtab<-table(cnvpheno$allgroup,cnvpheno$ethnicbinary)
+ethprop<-prop.table(ethtab,1)
+table1a[3,1]<-'% White'
+table1a[3,2:6]<-round(100*ethprop,0)
+
+#Add %highbias in row 4
+biastab<-table(cnvpheno$allgroup,cnvpheno$bias)
+biasprop<-prop.table(biastab,1)
+table1a[4,1]<-'% High bias*'
+table1a[4,2:6]<-100-round(100*biasprop,0)
+table1a[4,2:3]<-'-'
+#Add language concerns in row4 - from redcap
+#ie twin with parental concern re language
+
+table1a[5,1]<-'% with language concerns**'
+langtab<-table(cnvpheno$allgroup,cnvpheno$lang_conc)
+langprop<-prop.table(langtab,1)
+table1a[5,2:6]<-round(100*langprop[,2],0)
+table1a[5,4:6]<-'-'
+
+#Add mean gni in row 6
+#Add age in row 2
+myaggmean <-aggregate(cnvpheno$global_neurodev,by=list(cnvpheno$allgroup),FUN=mean,na.rm=TRUE)
+myaggsd <-aggregate(cnvpheno$global_neurodev,by=list(cnvpheno$allgroup),FUN=sd,na.rm=TRUE)
+table1a[6,1]<-'Mean (SD) GNI***'
+for (i in 1:5){
+table1a[6,(i+1)] <-paste0(round(myaggmean[i,2],1),' (',round(myaggsd[i,2],1),')')
+}
+
+write.csv(table1a,'Table 1.csv',row.names=F)
+
+#NB Some manual formatting needed
+# Also the asterisks need to be added to foot as table as follows:
+#  *SCT cases where trisomy identified during investigations for neurodevelopmental/behavioral disorders
+#  **Twin from a pair that was recruited because one or both twins had language problems
+#  *** Index of Global Neurodevelopmental Impairment (see Table 2)
+```
+
+```{r moretable3}
+
+measures<-c('total_cnvs','total_Kbp','sum_pLi')
+for(measure in 1:3){
+  thiscol <-which(colnames(cnvpheno)==measures[measure])
+for(loop in 1:2){
+bytrisomy <- describeBy(cnvpheno[thiscol],cnvpheno$allgroup)
+if(loop==2){
+  thisrow <-which(cnvpheno$bias==0)
+  bytrisomy <- describeBy(cnvpheno[thisrow,thiscol],cnvpheno$allgroup[thisrow])
+}
+desc.stats<-rbind(data.frame(bytrisomy[[1]])[c(2:5,8:9)],
+                  data.frame(bytrisomy[[2]])[c(2:5,8:9)],
+                  data.frame(bytrisomy[[3]])[c(2:5,8:9)],
+                  data.frame(bytrisomy[[4]])[c(2:5,8:9)],
+                  data.frame(bytrisomy[[5]])[c(2:5,8:9)])
+rownames(desc.stats)<-levels(cnvpheno$allgroup)
+if(loop==1)
+{desc.stats.all<-desc.stats}
+}
+  print(measures[measure])
+print('All cases')
+print(desc.stats.all)
+print('Low bias cases')
+print(desc.stats)
+
+bigtable<-data.frame(matrix(NA,nrow=12,ncol=7))
+colnames(bigtable)<-c('Karyotype',colnames(desc.stats))
+bigtable[1,1]<-paste0('All cases: ',measures[measure])
+bigtable[7,1]<-paste0('Low bias: ',measures[measure])
+bigtable[2:6,2:7]<-desc.stats.all
+bigtable[8:12,2:7]<-desc.stats
+bigtable[2:6,1]<-rownames(desc.stats)
+bigtable[8:12,1]<-rownames(desc.stats)
+
+if (measure==1){
+  bigbigtable <-bigtable
+}
+if (measure>1){
+  bigbigtable <-rbind(bigbigtable,bigtable)
+}
+}
+write.csv(bigbigtable,'Extra_tab3_forAppendix.csv',row.names=F)
+```
+
+```{r moretable4}
+w<-which(cnvpheno$piq>900) #treat error codes in PIQ as missing data
+cnvpheno$piq[w]<-NA
+mymat<-cbind(cnvpheno$piq,cnvpheno$langfactor,cnvpheno$global_neurodev)
+cor(mymat,use='complete.obs') #just checking correlations between measures
+
+#normally distributed data for langfactor and PIQ
+nutab4 <-data.frame(matrix(NA, nrow=10, ncol=5))
+colnames(nutab4)<-c('Term','Estimate','SE','t','p')
+nutab4[1,1]<-'Linear model, dv = Language factor'
+
+s<-summary(m1 <- lm(langfactor ~ sum_pLi_C + Group + sum_pLi_C:Group,  data=cnvpheno))
+nutab4[2:5,2:5]<-round(coef(s),2)
+nutab4[6,1]<-'Linear model, dv = PIQ'
+s<-summary(m1 <- lm(piq ~ sum_pLi_C + Group + sum_pLi_C:Group,  data=cnvpheno))
+nutab4[7:10,2:5]<-round(coef(s),2)
+nutab4[2:5,1]<-c('Intercept','Sum pLi','Group','Sum pLI x Group')
+nutab4[7:10,1]<-c('Intercept','Sum pLi','Group','Sum pLI x Group')
+
+write.csv(nutab4,'Extended tab4.csv',row.names=F)
+
+```
 
 ```{r sessinfo, include=TRUE}
 sessionInfo()
