@@ -34,6 +34,7 @@ require(conflicted) #flags up conflicted functions
 require(sandwich)
 library(coin)
 library(psych)
+library(ggrepel)
 ```
 
 ## Read and merge files
@@ -63,7 +64,7 @@ NB famsplangconc coded as 1 if any concern about speech/language in either twin.
 
 
 ```{r readfiles}
-readoriginal <- 1 
+readoriginal <- 0
   #set to 0 to read true data (cnvpheno.csv)
   #set to 1 if you want to run chunk to recreate merged cnvpheno file from original files
   #set to 2 to read synthetic data (cnv_syn.csv)
@@ -234,10 +235,10 @@ mytab
 ## TEXT SAYS 7 in TWINS - I can only find 6 as below
 pathocase <- c('639A','664B','668B','679A','869B','874A',
                '244','257','085','134','355','066','339','131','348')
-w<-which(cnvdat$id %in% pathocase)
-cnvdat$id[w]
-cnvdat$path<-0
-cnvdat$path[w]<-1
+w<-which(cnvpheno$record_id %in% pathocase)
+cnvpheno$id[w]
+cnvpheno$pathoCNV<-0
+cnvpheno$pathoCNV[w]<-1
 ```
 
 The derivation of the global neurodevelopmental index is now provided in the paper in Table 2.
@@ -266,9 +267,13 @@ shapelist<-c(19,1)
 
 levels(cnvpheno$bias_fac) <- c('Low bias' ,'High Bias')
 cnvpheno$jitter_cnv<-jitter(cnvpheno$total_cnvs)+.2 #add .2 to avoid negative value
-p1 <- ggplot(cnvpheno,aes(y=log(total_Kbp+1),x=jitter_cnv,colour=trisomy,shape=bias_fac))+
-  scale_shape_manual(values=shapelist)+
-   scale_color_manual(values=c('gray21','red'))+
+p1 <- ggplot(cnvpheno,aes(y=log(total_Kbp+1),x=jitter_cnv,,shape=interaction(trisomy,bias_fac),colour=interaction(trisomy,bias_fac)))+
+   scale_color_manual(name="Trisomy/Bias",values=c('black','red','black','red'),
+                     labels=c("Comparison, low bias", "Trisomy, low bias",
+                              "Comparison, high bias", "Trisomy, high bias"))+
+  scale_shape_manual(name="Trisomy/Bias", values=c(16, 16, 21, 21),
+                     labels=c("Comparison, low bias", "Trisomy, low bias",
+                              "Comparison, high bias", "Trisomy, high bias") )+
   geom_point()+
   scale_x_continuous(expand=c(0.02,0)) +
   scale_y_continuous(expand=c(0.02,0)) +
@@ -326,6 +331,13 @@ ggsave("CNV_fig1.png",plot=g1,device = 'png',dpi = 600,width=4.5,height=4,units 
 
 ![Figure 1](CNV_fig1.png)
 
+```{r tally_count,echo=FALSE}
+library(knitr)
+library(kableExtra)
+cnvpheno %>% group_by(trisomy,pathoCNV,bias_fac) %>% tally() %>% kable() %>% kable_styling(bootstrap_options = "striped", full_width = F) 
+```
+
+
 ```{r for.Fig2, echo=FALSE}
 #-----------------------------------------------------------------------------#
 
@@ -333,18 +345,27 @@ ggsave("CNV_fig1.png",plot=g1,device = 'png',dpi = 600,width=4.5,height=4,units 
 # Otherwise same as figure 1
 # Scatter plot with marginal histograms 
 # Used colour to depict twin/SCT and fill to depict bias - use settings from fig 1
-
+library(ggrepel)
 cnvpheno$neurodev_jittered <- jitter(cnvpheno$global_neurodev)+.2
-p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=neurodev_jittered,colour=trisomy,shape=bias_fac))+
-  scale_shape_manual(values=shapelist)+
-   scale_color_manual(values=c('gray21','red'))+
+cnvpheno$pathoCNV<-as.factor(cnvpheno$pathoCNV)
+levels(cnvpheno$pathoCNV) <- c(NA,"P")
+p1 <- ggplot(cnvpheno,aes(x=sum_pLi,y=neurodev_jittered,shape=interaction(trisomy,bias_fac),colour=interaction(trisomy,bias_fac)))+
+   scale_color_manual(name="Trisomy/Bias",values=c('black','red','black','red'),
+                     labels=c("Comparison, low bias", "Trisomy, low bias",
+                              "Comparison, high bias", "Trisomy, high bias"))+
+  scale_shape_manual(name="Trisomy/Bias", values=c(16, 16, 21, 21),
+                     labels=c("Comparison, low bias", "Trisomy, low bias",
+                              "Comparison, high bias", "Trisomy, high bias") )+
   geom_point()+
   scale_x_continuous(expand=c(0.02,0)) +
   scale_y_continuous(expand=c(0.02,0)) +
  labs(x = "Total pLI (all CNVs)",y="Global neurodev. impairment")+
   theme_bw() + guides(row = guide_legend(nrow=2)) +
   theme(legend.position=c(1,1.25),plot.margin=unit(c(1,1,1,1),"points"),legend.title = element_blank(),legend.text = element_text(size = 8),axis.title = element_text(size = 10),legend.box = "horizontal",
-        legend.background = element_rect(fill="grey",colour = "black"))
+        legend.background = element_rect(fill="grey",colour = "black"))+
+  geom_text_repel(aes(label = pathoCNV),show.legend = FALSE)
+  
+    
 
 theme0 <- function(...) theme( legend.position = "none",
                                panel.background = element_blank(),
@@ -385,7 +406,7 @@ g2<- grid.arrange(arrangeGrob(p2,ncol=2,widths=c(3,1)),
              arrangeGrob(p1,p3,ncol=2,widths=c(3,1)),
              heights=c(1,3))
 
-ggsave("CNV_fig2.png",plot=g2,device = 'png',dpi = 600,width=4.5,height=4,units = 'in')
+ggsave("CNV_fig2.png",plot=g2,device = 'png',dpi = 600,width=4.5,height=4.5,units = 'in')
 
 
 
